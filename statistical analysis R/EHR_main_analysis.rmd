@@ -1,0 +1,290 @@
+---
+title: "EHR project analyses"
+author: "Mariane Saroufim"
+date: "2023-11-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+setwd("/Users/alecstear/Documents/GitHub/anti-diabetics-study-with-EHR/data tables/sensitivity table analysis")
+df <- read.csv("df_MAIN_cohort_sensitivity.csv", na.strings = c("", " ", "NA"))
+options(scipen = 100, digits = 4)
+library(knitr)    
+library(tidyverse)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library(table1)
+library(tableone)
+colnames(df) <- c("PAT_ID", "sex", "diab_date", "birth_date", "age", "cancer", "COPD", "fracture", "hypertension", "surgery", "exp_date", "drug_class", "biguanide", "sulfonylureas", "DPP.4", "a_gluc_inhib", "VTE_date", "VTE")
+
+df <- df[,c(1,2,5,4,3,6:10,12:16,11,17,18)]
+```
+
+# 1. Setting up exposure variables 
+
+```{r setting up variables for analysis}
+summary(df)
+df$PAT_ID <- as.character(df$PAT_ID)
+df$sex <- as.factor(df$sex)
+df$birth_date <- as.Date(df$birth_date)
+df$diab_date <- as.Date(df$diab_date)
+df$cancer <- as.factor(df$cancer)
+df$COPD <- as.factor(df$COPD)
+df$fracture <- as.factor(df$fracture)
+df$hypertension <- as.factor(df$hypertension)
+df$surgery <- as.factor(df$surgery)
+df$biguanide <- as.factor(df$biguanide)
+df$sulfonylureas <- as.factor(df$sulfonylureas)
+df$DPP.4 <- as.factor(df$DPP.4)
+df$drug_class <- as.factor(df$drug_class)
+df$a_gluc_inhib <- as.factor(df$a_gluc_inhib)
+df$exp_date <- as.Date(df$exp_date)
+df$VTE_date <- as.Date(df$VTE_date)
+df$VTE <- as.factor(df$VTE)
+summary(df)
+
+table(df$drug_class, useNA = "always") # note the 1331 people who didn't take any drug, probably considered diabetic based on hospitalization but no drug in the 2019 to 2020 year
+
+table(df$biguanide)
+table(df$sulfonylureas)
+table(df$DPP.4)
+table(df$a_gluc_inhib)
+# total of 6,706 exposed to at least one drug
+
+# checking if a patient got exposed to more than one drug
+table(df$biguanide, df$sulfonylureas) 
+table(df$biguanide, df$DPP.4)
+table(df$biguanide, df$a_gluc_inhib) 
+table(df$sulfonylureas, df$DPP.4)
+table(df$sulfonylureas, df$a_gluc_inhib)
+table(df$DPP.4, df$a_gluc_inhib)
+# no patient was exposed to more than one drug, so it is safe to assume the exp_date is the date for each of the corresponding exposure 
+
+# make a group variable with values "case" or "control"
+df$group <- ifelse(df$VTE ==1, "case",
+                   ifelse(df$VTE ==0, "control", NA))
+table(df$group)
+
+# make an exp_[drug] (exposure status) binary variable for every class of drug we have in the data (biguanide, sulfonylureas, DPP.4, a_gluc_inhib) with values 1 if exp_date for this drug is before VTE_date and 0 if not 
+# this is because the binary variable for each drug that came from SQL did not look if the exposure was before the outcome, just if the exposure is between 2019 and 2020. 
+
+# exposure status for biguanide
+df$exp_biguanide <- ifelse(df$biguanide ==1 & df$exp_date < df$VTE_date, 1,
+                           ifelse(df$biguanide ==1 & df$exp_date >= df$VTE_date, 0,
+                                  ifelse(df$biguanide !=1, 0,
+                                         ifelse(df$biguanide ==1 & is.na(df$VTE_date), 1, "test"))))
+                                             
+table(df$exp_biguanide, useNA="always")
+df$exp_biguanide <- ifelse(is.na(df$exp_biguanide),1, df$exp_biguanide)
+table(df$exp_biguanide, useNA="always")
+
+# exposure status for sulfonylureas
+df$exp_sulfonylureas <- ifelse(df$sulfonylureas ==1 & df$exp_date < df$VTE_date, 1,
+                           ifelse(df$sulfonylureas ==1 & df$exp_date >= df$VTE_date, 0,
+                                  ifelse(df$sulfonylureas !=1, 0,
+                                         ifelse(df$sulfonylureas ==1 & is.na(df$VTE_date), 1, "test"))))
+                                             
+table(df$exp_sulfonylureas, useNA="always")
+df$exp_sulfonylureas <- ifelse(is.na(df$exp_sulfonylureas),1, df$exp_sulfonylureas)
+table(df$exp_sulfonylureas, useNA="always")
+
+# exposure status for DPP.4
+df$exp_DPP.4 <- ifelse(df$DPP.4 ==1 & df$exp_date < df$VTE_date, 1,
+                           ifelse(df$DPP.4 ==1 & df$exp_date >= df$VTE_date, 0,
+                                  ifelse(df$DPP.4 !=1, 0,
+                                         ifelse(df$DPP.4 ==1 & is.na(df$VTE_date), 1, "test"))))
+                                             
+table(df$exp_DPP.4, useNA="always")
+df$exp_DPP.4 <- ifelse(is.na(df$exp_DPP.4),1, df$exp_DPP.4)
+table(df$exp_DPP.4, useNA="always")
+
+# exposure status for a_gluc_inhib
+df$exp_a_gluc_inhib <- ifelse(df$a_gluc_inhib ==1 & df$exp_date < df$VTE_date, 1,
+                           ifelse(df$a_gluc_inhib ==1 & df$exp_date >= df$VTE_date, 0,
+                                  ifelse(df$a_gluc_inhib !=1, 0,
+                                         ifelse(df$a_gluc_inhib ==1 & is.na(df$VTE_date), 1, "test"))))
+                                             
+table(df$exp_a_gluc_inhib, useNA="always")
+df$exp_a_gluc_inhib <- ifelse(is.na(df$exp_a_gluc_inhib),1, df$exp_a_gluc_inhib)
+table(df$exp_a_gluc_inhib, useNA="always")
+```
+
+
+# 2. Matching 
+
+### On sex, age and all confounders (cancer, COPD, fracture, hypertension, surgery)
+```{r matching_all}
+library(MatchIt)
+# matching on age, sex and confounders cancer, COPD, fracture, hypertension, surgery
+m.out <- matchit(VTE ~ age + sex + cancer + COPD + fracture + hypertension + surgery, data = df, method="nearest")
+matched_df <- match.data(m.out)
+summary(m.out)
+summary(matched_df)
+
+# to check manually the balance of cases and controls on covariates age, sex, and confounders and exposures
+matched_df_cases <- matched_df[matched_df$VTE==1,]
+matched_df_controls <- matched_df[matched_df$VTE==0,]
+
+summary(matched_df_cases$age)
+summary(matched_df_controls$age)
+
+summary(matched_df_cases$sex)
+summary(matched_df_controls$sex)
+
+summary(matched_df_cases$cancer)
+summary(matched_df_controls$cancer)
+
+summary(matched_df_cases$COPD)
+summary(matched_df_controls$COPD)
+
+summary(matched_df_cases$fracture)
+summary(matched_df_controls$fracture)
+
+summary(matched_df_cases$hypertension)
+summary(matched_df_controls$hypertension)
+
+summary(matched_df_cases$surgery)
+summary(matched_df_controls$surgery)
+
+# don't match on exposures so don't expect to see similar numbers but just to check the numbers and verify coding worked for controls 
+table(matched_df_cases$exp_biguanide)
+table(matched_df_controls$exp_biguanide)
+
+table(matched_df_cases$exp_sulfonylureas)
+table(matched_df_controls$exp_sulfonylureas)
+
+table(matched_df_cases$exp_DPP.4)
+table(matched_df_controls$exp_DPP.4)
+
+table(matched_df_cases$exp_a_gluc_inhib)
+table(matched_df_controls$exp_a_gluc_inhib)
+```
+
+### On age and sex only
+```{r matching_few}
+# matching only age and sex, and confounders in the log reg
+m.out2 <- matchit(VTE ~ age + sex, data = df, method="nearest")
+matched_df2 <- match.data(m.out2)
+summary(m.out2)
+summary(matched_df2)
+
+# to check manually the balance of cases and controls on covariates age, sex, and exposures
+matched_df_cases2 <- matched_df2[matched_df2$VTE==1,]
+matched_df_controls2 <- matched_df2[matched_df2$VTE==0,]
+
+summary(matched_df_cases2$age)
+summary(matched_df_controls2$age)
+
+summary(matched_df_cases2$sex)
+summary(matched_df_controls2$sex)
+
+# don't match on exposures so don't expect to see similar numbers but just to check the numbers and verify coding worked for controls 
+table(matched_df_cases2$exp_biguanide)
+table(matched_df_controls2$exp_biguanide)
+
+table(matched_df_cases2$exp_sulfonylureas)
+table(matched_df_controls2$exp_sulfonylureas)
+
+table(matched_df_cases2$exp_DPP.4)
+table(matched_df_controls2$exp_DPP.4)
+
+table(matched_df_cases2$exp_a_gluc_inhib)
+table(matched_df_controls2$exp_a_gluc_inhib)
+```
+
+# 3. Multivariate conditional logistic regression
+
+### Using matched dataframe all (the one showing in the manuscript)
+```{r log reg}
+library(pROC)
+# raw raw, unmatched dataframe, and not adjusting for the covariates in the model
+m00 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib, data = df, family="binomial")
+summary(m00)
+exp(coef(m00))
+exp(confint(m00))
+
+predicted_prob00 <- predict(m00, type = "response")
+auc00 <- roc(df$VTE, predicted_prob00)
+print(auc00)
+
+# raw, unmatched dataframe, and adjusting for the covariates in the model
+m0 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib + age + sex + cancer + COPD + fracture + hypertension + surgery, data = df, family="binomial")
+summary(m0)
+exp(coef(m0))
+exp(confint(m0))
+
+predicted_prob0 <- predict(m0, type = "response")
+auc0 <- roc(df$VTE, predicted_prob0)
+print(auc0) # good! 
+
+# adjusted by matching on all variables (age, sex and confounders)
+m1 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib, data = matched_df, family="binomial")
+summary(m1)
+exp(coef(m1))
+exp(confint(m1))
+
+predicted_prob1 <- predict(m1, type = "response")
+auc1 <- roc(matched_df$VTE, predicted_prob1)
+print(auc1) # one before better 
+```
+
+
+### Using matched dataframe sex and age only
+```{r log reg2}
+library(pROC)
+
+# raw + matched only on age and sex
+m2 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib, data = matched_df2, family="binomial")
+summary(m2) 
+exp(coef(m2))
+
+predicted_prob2 <- predict(m2, type = "response")
+auc2 <- roc(matched_df$VTE, predicted_prob2)
+print(auc2) # really bad
+
+# fully adjusted (matched on age and sex + adjusting for confounders in model)
+m3 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib + cancer + COPD + fracture + hypertension + surgery, data = matched_df2, family="binomial")
+summary(m3)
+exp(coef(m3))
+
+predicted_prob3 <- predict(m3, type = "response")
+auc3 <- roc(matched_df$VTE, predicted_prob3)
+print(auc3) # really bad 
+```
+
+
+# 4. Making table for results using m1
+
+```{r log reg}
+matched_df$PAT_ID <- as.character(matched_df$PAT_ID)
+matched_df$sex <- as.factor(matched_df$sex)
+matched_df$birth_date <- as.Date(matched_df$birth_date)
+matched_df$diab_date <- as.Date(matched_df$diab_date)
+matched_df$cancer <- as.factor(matched_df$cancer)
+matched_df$COPD <- as.factor(matched_df$COPD)
+matched_df$fracture <- as.factor(matched_df$fracture)
+matched_df$hypertension <- as.factor(matched_df$hypertension)
+matched_df$surgery <- as.factor(matched_df$surgery)
+matched_df$biguanide <- as.factor(matched_df$biguanide)
+matched_df$sulfonylureas <- as.factor(matched_df$sulfonylureas)
+matched_df$DPP.4 <- as.factor(matched_df$DPP.4)
+matched_df$drug_class <- as.factor(matched_df$drug_class)
+matched_df$a_gluc_inhib <- as.factor(matched_df$a_gluc_inhib)
+matched_df$exp_date <- as.Date(matched_df$exp_date)
+matched_df$VTE_date <- as.Date(matched_df$VTE_date)
+matched_df$VTE <- as.factor(matched_df$VTE)
+summary(matched_df)
+
+m1 <- glm(VTE ~ exp_biguanide + exp_sulfonylureas + exp_DPP.4 + exp_a_gluc_inhib, data = matched_df, family=binomial(link = "logit"))
+summary(m1)
+exp(coef(m1))
+exp(confint(m1))
+
+# frequency tables (will do percentage manually)
+table(matched_df$exp_biguanide, matched_df$group) 
+table(matched_df$exp_sulfonylureas, matched_df$group)
+table(matched_df$exp_DPP.4, matched_df$group)
+table(matched_df$exp_a_gluc_inhib, matched_df$group)
+
+```
